@@ -1,0 +1,472 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ _("Barcode Scanner") }}{% endblock %}
+
+{% block head_include %}
+<script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+<style>
+	.scanner-container {
+		max-width: 900px;
+		margin: 0 auto;
+		padding: 10px 20px;
+		padding-top: 0px;
+	}
+
+	.camera-container {
+		position: relative;
+		width: 100%;
+		max-width: 600px;
+		margin: 20px auto;
+		text-align: center;
+		background: #000;
+		border-radius: 8px;
+		overflow: hidden;
+	}
+
+	#scanner-container {
+		width: 100%;
+		height: 400px;
+		position: relative;
+	}
+
+	#scanner-container video {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	#scanner-container canvas {
+		position: absolute;
+		top: 0;
+		left: 0;
+	}
+
+	.scanner-overlay {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		width: 250px;
+		height: 150px;
+		border: 2px solid #00ff00;
+		border-radius: 8px;
+		box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+		pointer-events: none;
+	}
+
+	.scanner-controls {
+		margin: 20px 0;
+		text-align: center;
+	}
+
+	.scanner-controls button {
+		margin: 5px 10px;
+		padding: 10px 20px;
+		font-size: 16px;
+		height: 58px;
+	}
+
+	.manual-input {
+		margin: 20px 0;
+		max-width: 400px;
+		margin-left: auto;
+		margin-right: auto;
+	}
+
+	.manual-input .form-control {
+		height: 58px;
+		font-size: 16px;
+		padding: 12px 16px;
+		border-radius: 0.375rem 0 0 0.375rem;
+	}
+
+	.manual-input .btn {
+		height: 58px;
+		font-size: 16px;
+		padding: 12px 20px;
+		border-radius: 0 0.375rem 0.375rem 0;
+		line-height: 1.5;
+	}
+
+	.item-details {
+		margin-top: 30px;
+		padding: 25px;
+		border: 2px solid #28a745;
+		border-radius: 12px;
+		background: linear-gradient(145deg, #f8f9fa, #e9ecef);
+		display: none;
+		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+	}
+
+	.item-image {
+		max-width: 200px;
+		max-height: 200px;
+		width: auto;
+		height: auto;
+		border-radius: 8px;
+		border: 2px solid #ddd;
+	}
+
+	.alert {
+		margin: 15px 0;
+		padding: 15px 20px;
+		border-radius: 8px;
+		font-size: 14px;
+		font-weight: 500;
+	}
+
+	.alert-success {
+		background-color: #d4edda;
+		border: 1px solid #c3e6cb;
+		color: #155724;
+	}
+
+	.alert-error {
+		background-color: #f8d7da;
+		border: 1px solid #f5c6cb;
+		color: #721c24;
+	}
+
+	.alert-info {
+		background-color: #d1ecf1;
+		border: 1px solid #bee5eb;
+		color: #0c5460;
+	}
+
+	.scanning-status {
+		position: absolute;
+		bottom: 10px;
+		left: 50%;
+		transform: translateX(-50%);
+		background: rgba(0, 0, 0, 0.8);
+		color: white;
+		padding: 8px 16px;
+		border-radius: 20px;
+		font-size: 12px;
+	}
+
+	.btn-scan {
+		background: #28a745;
+		border: none;
+		color: white;
+		transition: all 0.3s;
+	}
+
+	.btn-scan:hover {
+		background: #218838;
+		transform: translateY(-2px);
+	}
+
+	.btn-stop {
+		background: #dc3545;
+		border: none;
+		color: white;
+	}
+
+	.btn-stop:hover {
+		background: #c82333;
+	}
+</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="scanner-container">
+	<div class="text-center" style="margin-bottom: 5px;">
+		<h1><i class="fa fa-qrcode"></i> {{ _("Barcode Scanner") }}</h1>
+		<p class="text-muted">{{ _("Scan item barcodes to get detailed information instantly") }}</p>
+	</div>
+
+	<div class="camera-container">
+		<div id="scanner-container">
+			<!-- Camera feed will appear here -->
+			<div class="scanner-overlay"></div>
+			<div class="scanning-status" id="scanning-status" style="display: none;">
+				<i class="fa fa-spinner fa-spin"></i> Scanning for barcodes...
+			</div>
+		</div>
+	</div>
+
+	<div class="scanner-controls">
+		<button type="button" class="btn btn-scan btn-lg" id="start-camera">
+			<i class="fa fa-camera"></i> {{ _("Start Camera Scanner") }}
+		</button>
+		<button type="button" class="btn btn-stop btn-lg" id="stop-camera" style="display: none;">
+			<i class="fa fa-stop"></i> {{ _("Stop Scanner") }}
+		</button>
+	</div>
+
+	<div class="manual-input">
+		<div class="form-group">
+			<div class="input-group">
+				<input type="text" class="form-control form-control-lg" id="barcode-input"
+				       placeholder="{{ _("Enter barcode and press Enter") }}" autocomplete="off">
+				<div class="input-group-append">
+					<button class="btn btn-primary btn-lg" type="button" id="search-barcode">
+						<i class="fa fa-search"></i> {{ _("Search") }}
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div id="alert-container"></div>
+
+	<div id="item-details" class="item-details">
+		<div class="row align-items-start">
+			<div class="col-md-4 text-center">
+				<img id="item-image" class="item-image" style="display: none;" alt="Item Image">
+				<div id="no-image" style="display: none;">
+					<i class="fa fa-image" style="font-size: 48px; color: #ccc;"></i>
+					<p class="text-muted">No Image</p>
+				</div>
+			</div>
+			<div class="col-md-8">
+				<h3 id="item-name" class="text-primary" style="margin-top: 0;"></h3>
+				<div class="row mt-3">
+					<div class="col-sm-6">
+						<p><strong><i class="fa fa-tag"></i> {{ _("Item Code:") }}</strong><br><span id="item-code" class="text-muted"></span></p>
+					</div>
+					<div class="col-sm-6">
+						<p><strong><i class="fa fa-folder"></i> {{ _("Item Group:") }}</strong><br><span id="item-group" class="text-muted"></span></p>
+					</div>
+				</div>
+				<div class="row">
+					<div class="col-sm-6">
+						<p><strong><i class="fa fa-truck"></i> {{ _("Supplier:") }}</strong><br><span id="supplier" class="text-muted"></span></p>
+					</div>
+					<div class="col-sm-6">
+						<p><strong><i class="fa fa-money"></i> {{ _("Valuation Rate:") }}</strong><br><span id="valuation-rate" class="text-muted"></span></p>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Description section - full width within container -->
+		<div id="item-description-container" style="display: none;" class="mt-3">
+			<p><strong><i class="fa fa-info-circle"></i> {{ _("Description:") }}</strong></p>
+			<div id="item-description" class="border p-3 bg-white rounded" style="background-color: #fdfdfd;"></div>
+		</div>
+	</div>
+</div>
+
+<script>
+let isScanning = false;
+const startBtn = document.getElementById('start-camera');
+const stopBtn = document.getElementById('stop-camera');
+const barcodeInput = document.getElementById('barcode-input');
+const searchBtn = document.getElementById('search-barcode');
+const scanningStatus = document.getElementById('scanning-status');
+
+// Event listeners
+startBtn.addEventListener('click', startScanner);
+stopBtn.addEventListener('click', stopScanner);
+searchBtn.addEventListener('click', searchBarcode);
+barcodeInput.addEventListener('keypress', function(e) {
+	if (e.key === 'Enter') {
+		searchBarcode();
+	}
+});
+
+// Auto-focus on barcode input
+barcodeInput.focus();
+
+function startScanner() {
+	if (isScanning) return;
+
+	// Check if Quagga is loaded
+	if (typeof Quagga === 'undefined') {
+		showAlert('{{ _("Barcode scanner library not loaded. Please refresh and try again.") }}', 'error');
+		return;
+	}
+
+	isScanning = true;
+	startBtn.style.display = 'none';
+	stopBtn.style.display = 'inline-block';
+	scanningStatus.style.display = 'block';
+
+	// Configure Quagga
+	Quagga.init({
+		inputStream: {
+			name: "Live",
+			type: "LiveStream",
+			target: document.querySelector('#scanner-container'),
+			constraints: {
+				width: 600,
+				height: 400,
+				facingMode: "environment" // Use back camera
+			}
+		},
+		locator: {
+			patchSize: "medium",
+			halfSample: true
+		},
+		numOfWorkers: 2,
+		frequency: 10,
+		decoder: {
+			readers: [
+				"code_128_reader",
+				"ean_reader",
+				"ean_8_reader",
+				"code_39_reader",
+				"code_39_vin_reader",
+				"codabar_reader",
+				"upc_reader",
+				"upc_e_reader",
+				"i2of5_reader"
+			]
+		},
+		locate: true
+	}, function(err) {
+		if (err) {
+			console.error('QuaggaJS init error:', err);
+			showAlert('{{ _("Error starting camera: ") }}' + err.message, 'error');
+			stopScanner();
+			return;
+		}
+
+		showAlert('{{ _("Camera started! Point at a barcode to scan.") }}', 'info');
+		Quagga.start();
+	});
+
+	// Listen for successful barcode detection
+	Quagga.onDetected(function(result) {
+		const code = result.codeResult.code;
+		console.log('Barcode detected:', code);
+
+		// Stop scanning temporarily to prevent multiple detections
+		Quagga.stop();
+		isScanning = false;
+
+		// Update UI
+		barcodeInput.value = code;
+		stopScanner();
+
+		// Search for the item
+		searchItem(code);
+	});
+}
+
+function stopScanner() {
+	if (typeof Quagga !== 'undefined') {
+		Quagga.stop();
+	}
+
+	isScanning = false;
+	startBtn.style.display = 'inline-block';
+	stopBtn.style.display = 'none';
+	scanningStatus.style.display = 'none';
+}
+
+function searchBarcode() {
+	const barcode = barcodeInput.value.trim();
+	if (!barcode) {
+		showAlert('{{ _("Please enter a barcode") }}', 'error');
+		barcodeInput.focus();
+		return;
+	}
+
+	searchItem(barcode);
+}
+
+function searchItem(barcode) {
+	showAlert('{{ _("Searching for item...") }}', 'info');
+
+	// Call the API to search for item
+	frappe.call({
+		method: 'barcode_to_item_id.api.scan_barcode_and_get_item',
+		args: {
+			barcode: barcode
+		},
+		callback: function(r) {
+			if (r.message && r.message.success) {
+				displayItemDetails(r.message);
+				showAlert('{{ _("✓ Item found successfully!") }}', 'success');
+			} else {
+				hideItemDetails();
+				showAlert(r.message ? r.message.error : '{{ _("❌ Item not found for this barcode") }}', 'error');
+			}
+		},
+		error: function(r) {
+			hideItemDetails();
+			showAlert('{{ _("❌ Error occurred while searching") }}', 'error');
+			console.error('Search error:', r);
+		}
+	});
+}
+
+function displayItemDetails(item) {
+	document.getElementById('item-name').textContent = item.item_name || 'N/A';
+	document.getElementById('item-code').textContent = item.item_code || 'N/A';
+	document.getElementById('item-group').textContent = item.item_group || 'N/A';
+	document.getElementById('supplier').textContent = item.supplier || 'N/A';
+
+	// Format currency
+	const rate = item.valuation_rate || 0;
+	document.getElementById('valuation-rate').textContent = rate ?
+		new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(rate) : 'N/A';
+
+	// Handle description
+	const descriptionContainer = document.getElementById('item-description-container');
+	const descriptionDiv = document.getElementById('item-description');
+	if (item.description && item.description.trim()) {
+		descriptionDiv.innerHTML = item.description;
+		descriptionContainer.style.display = 'block';
+	} else {
+		descriptionContainer.style.display = 'none';
+	}
+
+	// Handle image
+	const imageElement = document.getElementById('item-image');
+	const noImageDiv = document.getElementById('no-image');
+	if (item.image && item.image.trim()) {
+		imageElement.src = item.image;
+		imageElement.style.display = 'block';
+		noImageDiv.style.display = 'none';
+	} else {
+		imageElement.style.display = 'none';
+		noImageDiv.style.display = 'block';
+	}
+
+	document.getElementById('item-details').style.display = 'block';
+
+	// Scroll to results
+	document.getElementById('item-details').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function hideItemDetails() {
+	document.getElementById('item-details').style.display = 'none';
+}
+
+function showAlert(message, type) {
+	const alertContainer = document.getElementById('alert-container');
+	let alertClass = 'alert-info';
+	let icon = 'fa-info-circle';
+
+	if (type === 'success') {
+		alertClass = 'alert-success';
+		icon = 'fa-check-circle';
+	} else if (type === 'error') {
+		alertClass = 'alert-error';
+		icon = 'fa-exclamation-triangle';
+	}
+
+	alertContainer.innerHTML = `
+		<div class="alert ${alertClass}">
+			<i class="fa ${icon}"></i> ${message}
+		</div>
+	`;
+
+	// Auto-hide alert after 5 seconds (except for errors)
+	if (type !== 'error') {
+		setTimeout(() => {
+			alertContainer.innerHTML = '';
+		}, 5000);
+	}
+}
+
+// Clean up on page unload
+window.addEventListener('beforeunload', function() {
+	stopScanner();
+});
+</script>
+{% endblock %}

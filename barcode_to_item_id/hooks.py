@@ -11,15 +11,15 @@ app_license = "mit"
 # required_apps = []
 
 # Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "barcode_to_item_id",
-# 		"logo": "/assets/barcode_to_item_id/logo.png",
-# 		"title": "Barcode To Item Id",
-# 		"route": "/barcode_to_item_id",
-# 		"has_permission": "barcode_to_item_id.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+	{
+		"name": "barcode_to_item_id",
+		"logo": "/assets/barcode_to_item_id/images/barcode-icon.svg",
+		"title": "Scanner",
+		"route": "/barcode-scanner",
+		"has_permission": "barcode_to_item_id.api.has_app_permission"
+	}
+]
 
 # Includes in <head>
 # ------------------
@@ -244,4 +244,7 @@ app_license = "mit"
 # default_log_clearing_doctypes = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
+
+# Add link to Stock module in ERPNext
+extend_bootinfo = "barcode_to_item_id.boot.boot_session"
 
