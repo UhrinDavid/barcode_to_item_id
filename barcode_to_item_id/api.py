@@ -52,7 +52,7 @@ def scan_barcode_and_get_item(barcode):
             "item_name": item.item_name,
             "item_group": item.item_group,
             "supplier": default_supplier or "No Supplier",
-            "description": frappe.utils.strip_html_tags(item.description or ""),  # Strip HTML for security
+            "description": item.description or "",  # Keep HTML for rich text display
             "image": item.image,
             "valuation_rate": item.valuation_rate,
             "barcode": item_barcode.barcode

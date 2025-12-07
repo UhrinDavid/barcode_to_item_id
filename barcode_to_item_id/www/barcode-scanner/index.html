@@ -3,7 +3,6 @@
 {% block title %}{{ _("Barcode Scanner") }}{% endblock %}
 
 {% block head_include %}
-<script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
 <style>
 	.scanner-container {
 		max-width: 900px;
@@ -250,6 +249,7 @@
 </div>
 
 <script>
+let scanner = null;
 let isScanning = false;
 const startBtn = document.getElementById('start-camera');
 const stopBtn = document.getElementById('stop-camera');
@@ -273,82 +273,63 @@ barcodeInput.focus();
 function startScanner() {
 	if (isScanning) return;
 
-	// Check if Quagga is loaded
-	if (typeof Quagga === 'undefined') {
-		showAlert('{{ _("Barcode scanner library not loaded. Please refresh and try again.") }}', 'error');
-		return;
-	}
-
 	isScanning = true;
 	startBtn.style.display = 'none';
 	stopBtn.style.display = 'inline-block';
 	scanningStatus.style.display = 'block';
 
-	// Configure Quagga
-	Quagga.init({
-		inputStream: {
-			name: "Live",
-			type: "LiveStream",
-			target: document.querySelector('#scanner-container'),
-			constraints: {
-				width: 600,
-				height: 400,
-				facingMode: "environment" // Use back camera
+	// Use Frappe's built-in scanner with html5-qrcode
+	frappe.require("/assets/frappe/node_modules/html5-qrcode/html5-qrcode.min.js").then(() => {
+		const scannerContainer = document.getElementById('scanner-container');
+		const scannerId = 'scanner-container';
+
+		scanner = new Html5Qrcode(scannerId);
+
+		scanner.start(
+			{ facingMode: "environment" }, // Use back camera
+			{
+				fps: 10,
+				qrbox: { width: 250, height: 150 },
+				aspectRatio: 1.5
+			},
+			(decodedText, decodedResult) => {
+				// On successful scan
+				console.log('Barcode detected:', decodedText);
+
+				// Update input field
+				barcodeInput.value = decodedText;
+
+				// Stop scanner
+				stopScanner();
+
+				// Search for the item
+				searchItem(decodedText);
+			},
+			(errorMessage) => {
+				// Parse error - ignore, this happens when no barcode is in view
 			}
-		},
-		locator: {
-			patchSize: "medium",
-			halfSample: true
-		},
-		numOfWorkers: 2,
-		frequency: 10,
-		decoder: {
-			readers: [
-				"code_128_reader",
-				"ean_reader",
-				"ean_8_reader",
-				"code_39_reader",
-				"code_39_vin_reader",
-				"codabar_reader",
-				"upc_reader",
-				"upc_e_reader",
-				"i2of5_reader"
-			]
-		},
-		locate: true
-	}, function(err) {
-		if (err) {
-			console.error('QuaggaJS init error:', err);
-			showAlert('{{ _("Error starting camera: ") }}' + err.message, 'error');
+		).catch((err) => {
+			console.error('Scanner start error:', err);
+			showAlert('{{ _("Error starting camera: ") }}' + err, 'error');
 			stopScanner();
-			return;
-		}
+		});
 
 		showAlert('{{ _("Camera started! Point at a barcode to scan.") }}', 'info');
-		Quagga.start();
-	});
-
-	// Listen for successful barcode detection
-	Quagga.onDetected(function(result) {
-		const code = result.codeResult.code;
-		console.log('Barcode detected:', code);
-
-		// Stop scanning temporarily to prevent multiple detections
-		Quagga.stop();
-		isScanning = false;
-
-		// Update UI
-		barcodeInput.value = code;
+	}).catch((err) => {
+		console.error('Failed to load scanner library:', err);
+		showAlert('{{ _("Failed to load barcode scanner library. Please refresh and try again.") }}', 'error');
 		stopScanner();
-
-		// Search for the item
-		searchItem(code);
 	});
 }
 
 function stopScanner() {
-	if (typeof Quagga !== 'undefined') {
-		Quagga.stop();
+	if (scanner && isScanning) {
+		scanner.stop().then(() => {
+			console.log('Scanner stopped');
+			document.getElementById('scanner-container').innerHTML = '<div class="scanner-overlay"></div><div class="scanning-status" id="scanning-status" style="display: none;"><i class="fa fa-spinner fa-spin"></i> Scanning for barcodes...</div>';
+		}).catch((err) => {
+			console.error('Error stopping scanner:', err);
+		});
 	}
 
 	isScanning = false;
